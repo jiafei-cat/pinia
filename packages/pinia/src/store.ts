@@ -206,6 +206,9 @@ function createOptionsStore<
   return store as any
 }
 
+/**
+ * 创建setup store
+ */
 function createSetupStore<
   Id extends string,
   SS extends Record<any, unknown>,
@@ -285,8 +288,10 @@ function createSetupStore<
   // avoid triggering too many listeners
   // https://github.com/vuejs/pinia/issues/1129
   let activeListener: Symbol | undefined
+  
   function $patch(stateMutation: (state: UnwrapRef<S>) => void): void
   function $patch(partialState: _DeepPartial<UnwrapRef<S>>): void
+  /** 内部方法 $patch 用于修改state */
   function $patch(
     partialStateOrMutator:
       | _DeepPartial<UnwrapRef<S>>
@@ -300,6 +305,7 @@ function createSetupStore<
       debuggerEvents = []
     }
     if (typeof partialStateOrMutator === 'function') {
+      /** 将state传递给外部修改 */
       partialStateOrMutator(pinia.state.value[$id] as UnwrapRef<S>)
       subscriptionMutation = {
         type: MutationType.patchFunction,
@@ -307,6 +313,7 @@ function createSetupStore<
         events: debuggerEvents as DebuggerEvent[],
       }
     } else {
+      /** 合并state */
       mergeReactiveObjects(pinia.state.value[$id], partialStateOrMutator)
       subscriptionMutation = {
         type: MutationType.patchObject,
@@ -409,7 +416,7 @@ function createSetupStore<
     state: [] as string[],
     hotState,
   })
-
+  /** 内部方法 */
   const partialStore = {
     _p: pinia,
     // _s: scope,
@@ -453,7 +460,7 @@ function createSetupStore<
     // start as non ready
     partialStore._r = false
   }
-
+  /** 创建store */
   const store: Store<Id, S, G, A> = reactive(
     __DEV__ || USE_DEVTOOLS
       ? assign(
@@ -470,6 +477,7 @@ function createSetupStore<
 
   // store the partial store now so the setup of stores can instantiate each other before they are finished without
   // creating infinite loops.
+  /** pinia实例上设置当前store */
   pinia._s.set($id, store)
 
   // TODO: idea create skipSerialize that marks properties as non serializable and they are skipped
@@ -799,6 +807,7 @@ export type StoreState<SS> = SS extends Store<
 // }>
 
 /**
+ * id + object options参数类型
  * Creates a `useStore` function that retrieves the store instance
  *
  * @param id - id of the store (must be unique)
@@ -816,6 +825,7 @@ export function defineStore<
 ): StoreDefinition<Id, S, G, A>
 
 /**
+ * id在object options参数类型
  * Creates a `useStore` function that retrieves the store instance
  *
  * @param options - options to define the store
@@ -829,6 +839,7 @@ export function defineStore<
 >(options: DefineStoreOptions<Id, S, G, A>): StoreDefinition<Id, S, G, A>
 
 /**
+ * id + setup函数参数类型
  * Creates a `useStore` function that retrieves the store instance
  *
  * @param id - id of the store (must be unique)
@@ -850,6 +861,10 @@ export function defineStore<Id extends string, SS>(
   _ExtractGettersFromSetupStore<SS>,
   _ExtractActionsFromSetupStore<SS>
 >
+/**
+ * 创建store
+ * 
+ */
 export function defineStore(
   // TODO: add proper types from above
   idOrOptions: any,
@@ -870,7 +885,7 @@ export function defineStore(
         _GettersTree<StateTree>,
         _ActionsTree
       >
-
+  /** options是不是setup store */
   const isSetupStore = typeof setup === 'function'
   if (typeof idOrOptions === 'string') {
     id = idOrOptions
@@ -881,8 +896,14 @@ export function defineStore(
     id = idOrOptions.id
   }
 
+  /** 在setup中调用, 如果在setup外调用需要将pinia传入 */
   function useStore(pinia?: Pinia | null, hot?: StoreGeneric): StoreGeneric {
+    /** 获取当前vue实例(deprecated方法) */
     const currentInstance = getCurrentInstance()
+    /**
+     * 判断是否有pinia实例(vue是否use过pinia实例)
+     * 1: 在单元测试可以通过activiPinia, 但在项目使用只能通过vue inject获取
+     */
     pinia =
       // in test mode, ignore the argument provided as we can always retrieve a
       // pinia instance with getActivePinia()
@@ -890,6 +911,7 @@ export function defineStore(
       (currentInstance && inject(piniaSymbol, null))
     if (pinia) setActivePinia(pinia)
 
+    /** 未安装pinia警告 */
     if (__DEV__ && !activePinia) {
       throw new Error(
         `[🍍]: getActivePinia was called with no active Pinia. Did you forget to install pinia?\n` +
@@ -900,7 +922,7 @@ export function defineStore(
     }
 
     pinia = activePinia!
-
+    /** 该store id是否注册过  */
     if (!pinia._s.has(id)) {
       // creating the store registers it in `pinia._s`
       if (isSetupStore) {
